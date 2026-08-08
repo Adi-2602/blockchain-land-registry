@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+*.env
+
+# User data
+backend/uploads/
+backend/users.json
+
+# Hardhat
+blockchain/artifacts/
+blockchain/cache/
+
+# Build outputs
+frontend/dist/
+
+# OS
+.DS_Store
