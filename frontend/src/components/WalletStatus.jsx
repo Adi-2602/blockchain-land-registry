@@ -1,7 +1,7 @@
 import { EXPECTED_CHAIN_ID, shortAddress } from "../wallet";
 
 // Register/Transfer form ke upar: wallet connected + registrar hai ya nahi
-function WalletStatus({ wallet, installed, error, connect }) {
+function WalletStatus({ wallet, installed, error, connect, switchNetwork }) {
   if (!installed) {
     return (
       <p className="notice warn">
@@ -23,10 +23,14 @@ function WalletStatus({ wallet, installed, error, connect }) {
 
   if (wallet.wrongNetwork) {
     return (
-      <p className="notice warn">
-        ⚠️ MetaMask is on chain {wallet.chainId.toString()}. Switch to the Ganache network (chain ID{" "}
-        {EXPECTED_CHAIN_ID.toString()}).
-      </p>
+      <div className="notice warn">
+        <span>
+          ⚠️ MetaMask is on chain {wallet.chainId.toString()}. Switch to the Ganache network (chain ID{" "}
+          {EXPECTED_CHAIN_ID.toString()}).
+        </span>
+        <button className="btn-small" onClick={switchNetwork}>Switch to Ganache</button>
+        {error && <p className="error">❌ {error}</p>}
+      </div>
     );
   }
 

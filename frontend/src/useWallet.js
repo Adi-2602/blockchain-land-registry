@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { hasMetaMask, readWalletState, walletErrorMessage } from "./wallet";
+import { hasMetaMask, readWalletState, switchToGanache, walletErrorMessage } from "./wallet";
 
 // MetaMask connection ka state + account/network change par auto refresh
 export default function useWallet() {
@@ -28,5 +28,15 @@ export default function useWallet() {
     };
   }, [refresh]);
 
-  return { wallet, error, connect: () => refresh(true), installed: hasMetaMask() };
+  const switchNetwork = useCallback(async () => {
+    try {
+      setError("");
+      await switchToGanache();
+      await refresh(); // chainChanged bhi aata hai, par turant update ke liye
+    } catch (err) {
+      setError(walletErrorMessage(err));
+    }
+  }, [refresh]);
+
+  return { wallet, error, connect: () => refresh(true), switchNetwork, installed: hasMetaMask() };
 }

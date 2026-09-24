@@ -188,6 +188,8 @@ VITE_CHAIN_ID=1337
 
 ### 5. Set up MetaMask
 
+> Shortcut: app mein Register/Transfer tab par **"Switch to Ganache"** button hai — woh MetaMask mein Ganache network khud add karke switch kar deta hai (`VITE_RPC_URL` se). Tab step 1 skip kar sakte ho.
+
 1. Add network → **RPC URL** `http://127.0.0.1:8545`, **Chain ID** `1337`, currency `ETH`.
 2. Import account → paste a Ganache private key (the one whose address you passed as `REGISTRAR_ADDRESS`, or the first account = admin).
 

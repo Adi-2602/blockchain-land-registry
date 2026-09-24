@@ -32,6 +32,32 @@ export async function readWalletState(requestAccess = false) {
   return { address, chainId, wrongNetwork, isRegistrar };
 }
 
+const RPC_URL = import.meta.env.VITE_RPC_URL || "http://127.0.0.1:8545";
+
+// MetaMask ko Ganache network par switch karo; network add nahi hai to pehle add karo
+export async function switchToGanache() {
+  if (!hasMetaMask()) throw new Error("MetaMask is not installed");
+  const chainId = "0x" + EXPECTED_CHAIN_ID.toString(16);
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
+  } catch (err) {
+    // 4902 = MetaMask ko ye chain pata hi nahi
+    const code = err.code ?? err.data?.originalError?.code;
+    if (code !== 4902) throw err;
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId,
+          chainName: "Ganache Local",
+          rpcUrls: [RPC_URL],
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        },
+      ],
+    });
+  }
+}
+
 // Transaction sign karne ke liye signer wala contract
 export async function getSignedRegistry() {
   if (!CONTRACT_ADDRESS) throw new Error("VITE_CONTRACT_ADDRESS is not set in frontend/.env");
@@ -41,7 +67,7 @@ export async function getSignedRegistry() {
 
 // MetaMask / contract errors ko readable message mein badlo
 export function walletErrorMessage(err) {
-  if (err.code === "ACTION_REJECTED") return "Transaction was rejected in MetaMask.";
+  if (err.code === "ACTION_REJECTED" || err.code === 4001) return "Request was rejected in MetaMask.";
   return err.reason || err.shortMessage || err.message || "Transaction failed";
 }
 
