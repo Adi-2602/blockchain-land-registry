@@ -31,6 +31,20 @@ function hashFile(path) {
   return crypto.createHash("sha256").update(fileBuffer).digest("hex");
 }
 
+// Helper: kisi bhi error (ethers / Cloudinary / normal) se readable message nikalo
+// aur poora error terminal mein print karo, taaki debug karna aasaan ho
+function errorText(label, err) {
+  console.error(`[${label}]`, err);
+  const msg =
+    err?.reason ||
+    err?.shortMessage ||
+    err?.message ||
+    err?.error?.message ||
+    (typeof err === "string" ? err : JSON.stringify(err));
+  if (err?.http_code || err?.error?.http_code) return `Cloud storage error: ${msg}`;
+  return msg || "Unknown server error";
+}
+
 // Helper: kaam ho jaane ke baad temp upload delete karo
 function removeTempFile(file) {
   if (file) fs.promises.unlink(file.path).catch(() => {});
@@ -66,7 +80,7 @@ app.post("/api/land/prepare", authMiddleware, upload.single("document"), async (
 
     res.json({ success: true, landId, docHash, docUrl });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: errorText("prepare", err) });
   } finally {
     removeTempFile(req.file);
   }
@@ -88,7 +102,7 @@ app.get("/api/land/:id/history", async (req, res) => {
     }));
     res.json({ success: true, history });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: errorText("history", err) });
   }
 });
 
@@ -110,7 +124,7 @@ app.post("/api/land/verify", upload.single("document"), async (req, res) => {
       uploadedHash,
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: errorText("verify", err) });
   } finally {
     removeTempFile(req.file);
   }
