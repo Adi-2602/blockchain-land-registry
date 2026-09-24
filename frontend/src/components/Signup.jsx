@@ -11,7 +11,7 @@ function Signup({ switchToLogin }) {
 
   const handleSignup = async () => {
     if (!name || !email || !password) {
-      setError("Saare fields zaroori hain");
+      setError("All fields are required.");
       return;
     }
     setLoading(true);
@@ -20,7 +20,7 @@ function Signup({ switchToLogin }) {
     try {
       const res = await api.post("/auth/signup", { name, email, password });
       setSuccess(res.data.message);
-      setTimeout(switchToLogin, 1500); // 1.5 sec baad login pe bhej do
+      setTimeout(switchToLogin, 1500); // back to login after 1.5 s
     } catch (err) {
       setError(err.response?.data?.error || "Signup failed");
     } finally {
@@ -31,7 +31,7 @@ function Signup({ switchToLogin }) {
   return (
     <div className="card auth-card">
       <h2>📝 Signup</h2>
-      <p className="subtitle">Create registrar account</p>
+      <p className="subtitle">Create a registrar account (approved emails only)</p>
 
       <div className="form">
         <input
@@ -62,7 +62,7 @@ function Signup({ switchToLogin }) {
 
       <p className="switch-auth">
         Already registered?{" "}
-        <span onClick={switchToLogin}>Login karo</span>
+        <span onClick={switchToLogin}>Log in</span>
       </p>
     </div>
   );

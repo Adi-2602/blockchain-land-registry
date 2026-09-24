@@ -31,70 +31,60 @@ function hashFile(path) {
   return crypto.createHash("sha256").update(fileBuffer).digest("hex");
 }
 
-// 1. Register land (document ke saath)
-// 1. Register land (document ke saath)
-app.post("/api/land/register", authMiddleware, upload.single("document"), async (req, res) => {
-  try {
-    const { landId, ownerName, location } = req.body;
+// Helper: kaam ho jaane ke baad temp upload delete karo
+function removeTempFile(file) {
+  if (file) fs.promises.unlink(file.path).catch(() => {});
+}
 
-    // Duplicate check — clean error message ke liye
+// 1. Prepare document (register ya transfer se pehle)
+//    PDF ka hash banao + cloud pe upload karo. Blockchain transaction
+//    registrar khud frontend se MetaMask ke through sign karta hai.
+app.post("/api/land/prepare", authMiddleware, upload.single("document"), async (req, res) => {
+  try {
+    const { landId, action } = req.body || {};
+    if (!landId || !req.file) {
+      return res.status(400).json({ success: false, error: "Land ID and a PDF document are required" });
+    }
+    if (action !== "register" && action !== "transfer") {
+      return res.status(400).json({ success: false, error: "action must be 'register' or 'transfer'" });
+    }
+
+    // Duplicate / existence check — MetaMask popup se pehle clean error ke liye
     const exists = await contract.landExists(landId);
-    if (exists) {
+    if (action === "register" && exists) {
       return res.status(400).json({
         success: false,
         error: `Land ${landId} is already registered. Use Transfer to change ownership.`,
       });
     }
+    if (action === "transfer" && !exists) {
+      return res.status(400).json({ success: false, error: `Land ${landId} is not registered yet.` });
+    }
 
     const docHash = hashFile(req.file.path);
-
-    // Cloud upload
     const docUrl = await uploadToCloud(req.file.path, landId);
 
-    const tx = await contract.registerLand(landId, ownerName, location, docHash);
-    await tx.wait();
-
-    res.json({ success: true, landId, docHash, docUrl, txHash: tx.hash });
+    res.json({ success: true, landId, docHash, docUrl });
   } catch (err) {
     res.status(500).json({ success: false, error: err.reason || err.message });
+  } finally {
+    removeTempFile(req.file);
   }
 });
 
-// 2. Transfer ownership (naye document ke saath)
-app.post("/api/land/transfer",authMiddleware, upload.single("document"), async (req, res) => {
-  try {
-    const { landId, newOwner } = req.body;
-    const exists = await contract.landExists(landId);
-
-    if (!exists) {
-       return res.status(400).json({
-       success: false,
-       error: `Land ${landId} is not registered yet.`,
-    });
-    }
-    const newDocHash = hashFile(req.file.path);
-
-    const docUrl = await uploadToCloud(req.file.path, landId);
-
-    const tx = await contract.transferOwnership(landId, newOwner, newDocHash);
-    await tx.wait();
-
-    res.json({ success: true, landId, newOwner, newDocHash, docUrl, txHash: tx.hash });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
-  }
-});
-
-// 3. History dekho
+// 2. History dekho
 app.get("/api/land/:id/history", async (req, res) => {
   try {
     const records = await contract.getHistory(req.params.id);
-    const history = records.map(r => ({
+    const history = records.map((r, i) => ({
+      version: i + 1,
       landId: r.landId,
       ownerName: r.ownerName,
       location: r.location,
       docHash: r.docHash,
-      timestamp: new Date(Number(r.timestamp) * 1000).toLocaleString()
+      docUrl: r.docUrl,
+      registeredBy: r.registeredBy,
+      timestamp: Number(r.timestamp), // unix seconds — frontend format karega
     }));
     res.json({ success: true, history });
   } catch (err) {
@@ -102,16 +92,27 @@ app.get("/api/land/:id/history", async (req, res) => {
   }
 });
 
-// 4. Verify document
+// 3. Verify document — poori history ke against
 app.post("/api/land/verify", upload.single("document"), async (req, res) => {
   try {
-    const { landId } = req.body;
+    const { landId } = req.body || {};
+    if (!landId || !req.file) {
+      return res.status(400).json({ success: false, error: "Land ID and a PDF document are required" });
+    }
     const uploadedHash = hashFile(req.file.path);
-    const isValid = await contract.verifyHash(landId, uploadedHash);
+    const [found, isCurrent, version] = await contract.verifyDocument(landId, uploadedHash);
 
-    res.json({ success: true, verified: isValid, uploadedHash });
+    res.json({
+      success: true,
+      verified: found,
+      isCurrent,
+      version: Number(version),
+      uploadedHash,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.reason || err.message });
+  } finally {
+    removeTempFile(req.file);
   }
 });
 

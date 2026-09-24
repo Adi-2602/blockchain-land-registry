@@ -1,5 +1,6 @@
 import { useState } from "react";
-import api from "../api";
+import api, { errorMessage } from "../api";
+import { shortAddress } from "../wallet";
 
 function SearchLand() {
   const [landId, setLandId] = useState("");
@@ -9,7 +10,7 @@ function SearchLand() {
 
   const handleSearch = async () => {
     if (!landId) {
-      setError("Land ID daalo");
+      setError("Enter a Land ID to search.");
       return;
     }
 
@@ -18,63 +19,62 @@ function SearchLand() {
     setHistory(null);
 
     try {
-      const res = await api.get(`/land/${landId}/history`);
+      const res = await api.get(`/land/${encodeURIComponent(landId)}/history`);
       setHistory(res.data.history);
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+    <div className="card">
       <h2>Search Land / Ownership History</h2>
+      <p className="subtitle">Public view — every record is read directly from the blockchain.</p>
 
-      <div style={{ display: "flex", gap: "8px" }}>
+      <div className="search-row">
         <input
           type="text"
           placeholder="Land ID (e.g. LAND101)"
           value={landId}
-          onChange={(e) => setLandId(e.target.value)}
-          style={{ flex: 1 }}
+          onChange={(e) => setLandId(e.target.value.trim())}
+          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
         />
         <button onClick={handleSearch} disabled={loading}>
-          {loading ? "Searching..." : "Search"}
+          {loading ? "Searching…" : "Search"}
         </button>
       </div>
 
-      {error && <p style={{ color: "red", marginTop: "12px" }}>❌ {error}</p>}
+      {error && <p className="error">❌ {error}</p>}
 
       {history && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>Ownership Timeline ({history.length} record{history.length > 1 ? "s" : ""})</h3>
+        <div className="timeline">
+          <h3>
+            Ownership timeline ({history.length} record{history.length > 1 ? "s" : ""})
+          </h3>
 
-          {history.map((record, index) => (
-            <div
-              key={index}
-              style={{
-                borderLeft: "3px solid #4caf50",
-                paddingLeft: "16px",
-                marginBottom: "16px",
-                position: "relative",
-              }}
-            >
-              <p style={{ margin: "4px 0" }}>
-                <b>
-                  {index === history.length - 1
-                    ? "🟢 Current Owner"
-                    : `Owner #${index + 1}`}
-                  : {record.ownerName}
-                </b>
-              </p>
-              <p style={{ margin: "4px 0" }}>📍 {record.location}</p>
-              <p style={{ margin: "4px 0" }}>🕒 {record.timestamp}</p>
-              <p style={{ margin: "4px 0", wordBreak: "break-all", fontSize: "13px", color: "#666" }}>
-                🔗 Hash: {record.docHash}
-              </p>
-            </div>
-          ))}
+          {history.map((record, index) => {
+            const isCurrent = index === history.length - 1;
+            return (
+              <div key={record.version} className={isCurrent ? "timeline-item current" : "timeline-item"}>
+                <p className="owner">
+                  {isCurrent ? "🟢 Current owner" : `Owner #${record.version}`}: <b>{record.ownerName}</b>
+                </p>
+                <p>📍 {record.location}</p>
+                <p>🕒 {new Date(record.timestamp * 1000).toLocaleString()}</p>
+                <p>
+                  ✍️ Signed by registrar <code title={record.registeredBy}>{shortAddress(record.registeredBy)}</code>
+                </p>
+                <p className="hash">🔗 {record.docHash}</p>
+                {record.docUrl && (
+                  <p>
+                    <a href={record.docUrl} target="_blank" rel="noreferrer">📄 View document</a>
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

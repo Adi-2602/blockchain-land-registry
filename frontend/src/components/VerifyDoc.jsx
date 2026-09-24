@@ -1,5 +1,5 @@
 import { useState } from "react";
-import api from "../api";
+import api, { errorMessage } from "../api";
 
 function VerifyDoc() {
   const [landId, setLandId] = useState("");
@@ -10,7 +10,7 @@ function VerifyDoc() {
 
   const handleVerify = async () => {
     if (!landId || !file) {
-      setError("Land ID aur document dono chahiye");
+      setError("Enter the Land ID and choose the PDF to verify.");
       return;
     }
 
@@ -26,17 +26,21 @@ function VerifyDoc() {
       const res = await api.post("/land/verify", formData);
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
+  // Teen possible result: current deed, purana (valid) deed, ya tampered
+  const outcome = !result ? null : !result.verified ? "tampered" : result.isCurrent ? "verified" : "older";
+
   return (
     <div className="card">
       <h2>Verify Document</h2>
       <p className="subtitle">
-        Document upload karo — system iska hash blockchain wale hash se compare karega
+        Upload a land document — its SHA-256 hash is compared with every hash recorded on the blockchain for
+        that land.
       </p>
 
       <div className="form">
@@ -44,28 +48,38 @@ function VerifyDoc() {
           type="text"
           placeholder="Land ID (e.g. LAND101)"
           value={landId}
-          onChange={(e) => setLandId(e.target.value)}
+          onChange={(e) => setLandId(e.target.value.trim())}
         />
         <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
 
         <button onClick={handleVerify} disabled={loading}>
-          {loading ? "Verifying against blockchain..." : "Verify Document"}
+          {loading ? "Verifying against blockchain…" : "Verify Document"}
         </button>
       </div>
 
       {error && <p className="error">❌ {error}</p>}
 
-      {result && (
-        <div className={result.verified ? "result-box verified" : "result-box tampered"}>
-          {result.verified ? (
+      {outcome && (
+        <div className={`result-box ${outcome}`}>
+          {outcome === "verified" && (
             <>
-              <h3>✅ DOCUMENT VERIFIED</h3>
-              <p>Ye document authentic hai — hash blockchain record se match karta hai.</p>
+              <h3>✅ DOCUMENT VERIFIED — CURRENT DEED</h3>
+              <p>This document is authentic and belongs to the current owner (record #{result.version}).</p>
             </>
-          ) : (
+          )}
+          {outcome === "older" && (
+            <>
+              <h3>🕘 AUTHENTIC — OLDER DEED</h3>
+              <p>
+                This document is genuine but matches record #{result.version}, not the latest one. Ownership has
+                changed since — check the history.
+              </p>
+            </>
+          )}
+          {outcome === "tampered" && (
             <>
               <h3>❌ TAMPERED / INVALID DOCUMENT</h3>
-              <p>Hash mismatch! Ye document original registered document nahi hai.</p>
+              <p>No record for this land has this hash. The document was modified or never registered.</p>
             </>
           )}
           <p className="hash">Uploaded file hash: {result.uploadedHash}</p>

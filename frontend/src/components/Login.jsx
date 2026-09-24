@@ -9,7 +9,7 @@ function Login({ onLogin, switchToSignup }) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError("Email aur password dono chahiye");
+      setError("Email and password are required.");
       return;
     }
     setLoading(true);
@@ -52,8 +52,8 @@ function Login({ onLogin, switchToSignup }) {
       {error && <p className="error">❌ {error}</p>}
 
       <p className="switch-auth">
-        Account nahi hai?{" "}
-        <span onClick={switchToSignup}>Signup karo</span>
+        No account yet?{" "}
+        <span onClick={switchToSignup}>Sign up</span>
       </p>
     </div>
   );

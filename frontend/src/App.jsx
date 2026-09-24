@@ -5,6 +5,8 @@ import TransferLand from "./components/TransferLand";
 import VerifyDoc from "./components/VerifyDoc";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
+import useWallet from "./useWallet";
+import { shortAddress } from "./wallet";
 import "./index.css";
 
 const TABS = [
@@ -19,6 +21,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [userName, setUserName] = useState(localStorage.getItem("userName"));
   const [authPage, setAuthPage] = useState("login"); // login | signup
+  const walletState = useWallet();
 
   const handleLogin = (newToken, name) => {
     localStorage.setItem("token", newToken);
@@ -45,11 +48,19 @@ function App() {
         <h1>🏛️ Blockchain Land Registry</h1>
         <p>Tamper-proof land records — Cloud + Blockchain</p>
 
-        {token && (
-          <div className="user-bar">
-            👤 {userName} · <span onClick={handleLogout}>Logout</span>
-          </div>
-        )}
+        <div className="header-bars">
+          {token && (
+            <div className="user-bar">
+              👤 {userName} · <span onClick={handleLogout}>Logout</span>
+            </div>
+          )}
+          {walletState.wallet && (
+            <div className="user-bar">
+              🦊 {shortAddress(walletState.wallet.address)}
+              {walletState.wallet.isRegistrar && " · registrar"}
+            </div>
+          )}
+        </div>
       </header>
 
       <nav className="tabs">
@@ -73,9 +84,9 @@ function App() {
           )
         ) : (
           <>
-            {activeTab === "register" && <RegistryLand />}
+            {activeTab === "register" && <RegistryLand walletState={walletState} />}
             {activeTab === "search" && <SearchLand />}
-            {activeTab === "transfer" && <TransferLand />}
+            {activeTab === "transfer" && <TransferLand walletState={walletState} />}
             {activeTab === "verify" && <VerifyDoc />}
           </>
         )}

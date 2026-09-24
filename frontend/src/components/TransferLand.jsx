@@ -1,87 +1,89 @@
 import { useState } from "react";
-import api from "../api";
+import { errorMessage } from "../api";
+import { submitLandTransaction } from "../landTx";
+import { walletErrorMessage } from "../wallet";
+import WalletStatus from "./WalletStatus";
 
-function TransferLand() {
+function TransferLand({ walletState }) {
   const [landId, setLandId] = useState("");
   const [newOwner, setNewOwner] = useState("");
   const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [fileKey, setFileKey] = useState(0);
+  const [stage, setStage] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
+  const { wallet } = walletState;
+  const canSign = wallet && !wallet.wrongNetwork && wallet.isRegistrar;
+
   const handleTransfer = async () => {
     if (!landId || !newOwner || !file) {
-      setError("Land ID, naya owner aur naya document zaroori hai");
+      setError("Land ID, new owner and the new sale deed PDF are required.");
       return;
     }
 
-    setLoading(true);
     setError("");
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("landId", landId);
-      formData.append("newOwner", newOwner);
-      formData.append("document", file);
-
-      const res = await api.post("/land/transfer", formData);
-      setResult(res.data);
+      const res = await submitLandTransaction({
+        action: "transfer",
+        landId,
+        file,
+        onStage: setStage,
+        send: (registry, doc) => registry.transferOwnership(landId, newOwner, doc.docHash, doc.docUrl),
+      });
+      setResult({ ...res, newOwner });
 
       setLandId("");
       setNewOwner("");
       setFile(null);
+      setFileKey((k) => k + 1);
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      setError(err.response ? errorMessage(err) : walletErrorMessage(err));
     } finally {
-      setLoading(false);
+      setStage("");
     }
   };
 
   return (
-    <div style={{ maxWidth: "500px", margin: "0 auto" }}>
+    <div className="card">
       <h2>Transfer Ownership</h2>
+      <p className="subtitle">The previous owner stays in the on-chain history; only a new record is added.</p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <WalletStatus {...walletState} />
+
+      <div className="form">
         <input
           type="text"
           placeholder="Land ID (e.g. LAND101)"
           value={landId}
-          onChange={(e) => setLandId(e.target.value)}
+          onChange={(e) => setLandId(e.target.value.trim())}
         />
         <input
           type="text"
-          placeholder="New Owner Name"
+          placeholder="New owner name"
           value={newOwner}
           onChange={(e) => setNewOwner(e.target.value)}
         />
-        <label style={{ fontSize: "14px", color: "#555" }}>
-          New sale deed / transfer document:
-        </label>
-        <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
+        <label className="field-label">New sale deed / transfer document (PDF, max 10 MB)</label>
+        <input key={fileKey} type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files[0])} />
 
-        <button onClick={handleTransfer} disabled={loading}>
-          {loading ? "Transferring on blockchain..." : "Transfer Ownership"}
+        <button onClick={handleTransfer} disabled={!!stage || !canSign}>
+          {stage || "Transfer Ownership"}
         </button>
       </div>
 
-      {error && <p style={{ color: "red", marginTop: "12px" }}>❌ {error}</p>}
+      {error && <p className="error">❌ {error}</p>}
 
       {result && (
-        <div
-          style={{
-            marginTop: "16px",
-            padding: "12px",
-            border: "1px solid green",
-            borderRadius: "8px",
-            wordBreak: "break-all",
-          }}
-        >
-          <p>✅ <b>Ownership transferred!</b></p>
+        <div className="result-box verified">
+          <h3>✅ Ownership transferred</h3>
           <p><b>Land ID:</b> {result.landId}</p>
-          <p><b>New Owner:</b> {result.newOwner}</p>
-          <p><b>New Doc Hash:</b> {result.newDocHash}</p>
-          <p><b>Transaction:</b> {result.txHash}</p>
+          <p><b>New owner:</b> {result.newOwner}</p>
+          <p className="hash"><b>New document hash:</b> {result.docHash}</p>
+          <p className="hash"><b>Transaction:</b> {result.txHash} (block {result.blockNumber})</p>
+          <p><a href={result.docUrl} target="_blank" rel="noreferrer">📄 View stored document</a></p>
         </div>
       )}
     </div>

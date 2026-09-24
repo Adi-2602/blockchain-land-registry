@@ -23,26 +23,29 @@ Land records managed through centralized systems face risks of unauthorized chan
 
 ## 🏗️ Architecture
 
+```
+┌────────────────────┐   REST + JWT   ┌──────────────────────┐        ┌──────────────────┐
+│ React 19 + Vite    │───────────────▶│ Express API          │───────▶│ Cloudinary       │
+│ Axios, ethers.js   │                │ Multer · SHA-256     │        │ (PDF documents)  │
+│                    │◀── docHash ────│ /prepare · /verify   │        └──────────────────┘
+│ 🦊 MetaMask signer │                │ /history (read-only) │
+└─────────┬──────────┘                └──────────┬───────────┘
+          │ registerLand / transferOwnership      │ getHistory / verifyDocument
+          ▼  (signed by registrar wallet)          ▼  (read-only provider)
+     ┌─────────────────────────────────────────────────────────┐
+     │ LandRegistry.sol — Ganache (local Ethereum)             │
+     │ admin · registrars · lands · history[] · events         │
+     └─────────────────────────────────────────────────────────┘
+```
 
-┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
-│ React (UI) │─────▶│ Express API │─────▶│ Ganache (Local │
-│ Vite, Axios │ │ + Multer │ │ Ethereum Chain) │
-└──────────────┘ └──────┬───────┘ │ LandRegistry.sol │
-│ └──────────────────┘
-▼
-┌──────────────┐
-│ File Storage │
-│ + SHA-256 │
-│ Hashing │
-└──────────────┘
+**Register / Transfer flow:** registrar logs in → uploads PDF → backend hashes it (SHA-256) and stores it on Cloudinary → returns `docHash` + `docUrl` → registrar signs `registerLand()` / `transferOwnership()` in **MetaMask** → UI shows the transaction hash.
 
+**Verify flow (public, no login):** upload PDF → backend hashes it → `verifyDocument()` checks it against **every** record of that land → current deed ✅ / older genuine deed 🕘 / tampered ❌.
 
-
-
-
-**Flow:** Document upload → SHA-256 hash generate → hash + land details smart contract mein → verification par fresh hash compute karke chain wale hash se compare.
-
-**Key Design Decision:** Documents blockchain par store NahI hote (costly + inefficient). Sirf unke cryptographic hashes chain par jaate hain — documents off-chain storage mein rehte hain. Ye industry-standard hybrid pattern hai.
+**Key Design Decisions**
+- Documents blockchain par store NAHI hote (costly + inefficient) — sirf SHA-256 hash + cloud URL on-chain jaate hain (industry-standard hybrid pattern).
+- Write access on-chain enforce hota hai: sirf `admin` dwara approved registrar wallets hi register/transfer kar sakte hain. Backend ke paas koi private key nahi hai.
+- History append-only hai — purane owners kabhi overwrite nahi hote.
 
 ---
 
@@ -53,61 +56,78 @@ Land records managed through centralized systems face risks of unauthorized chan
 | Smart Contract | Solidity ^0.8.19 |
 | Blockchain (Local) | Ganache |
 | Development Framework | Hardhat 2 |
-| Chain Interaction | ethers.js v6 |
-| Backend | Node.js + Express |
-| File Upload | Multer |
+| Chain Interaction | ethers.js v6 (backend read-only, frontend via MetaMask) |
+| Wallet | MetaMask |
+| Backend | Node.js + Express 5 |
+| File Upload | Multer (PDF only, 10 MB) |
 | Hashing | Node.js `crypto` (SHA-256) |
-| Frontend | React 18 + Vite |
+| Cloud Storage | Cloudinary |
+| Auth | JWT + bcrypt, registrar allow-list |
+| Frontend | React 19 + Vite |
 | HTTP Client | Axios |
 
 ---
 
 ## 📁 Project Structure
 
-
-andrecords/
+```
+blockchain-land-registry/
 ├── blockchain/
-│ ├── contracts/LandRegistry.sol # Smart contract
-│ ├── scripts/deploy.js # Deployment script
-│ └── hardhat.config.cjs
+│   ├── contracts/LandRegistry.sol   # Smart contract (registrar roles + history)
+│   ├── scripts/deploy.js            # Deploy + copy ABI to backend & frontend
+│   ├── test/LandRegistry.js         # Contract tests
+│   └── hardhat.config.cjs
 ├── backend/
-│ ├── server.js # Express API (4 endpoints)
-│ ├── contract.js # ethers.js chain connection
-│ ├── LandRegistry.json # Contract ABI
-│ ├── uploads/ # Uploaded documents
-│ └── .env # Config (not committed)
+│   ├── server.js                    # Express API
+│   ├── auth.js                      # Signup/login, JWT, registrar allow-list
+│   ├── contract.js                  # Read-only ethers.js connection
+│   ├── cloudinary.js                # Cloud upload
+│   ├── LandRegistry.json            # Contract ABI (written by deploy.js)
+│   └── .env.example
 └── frontend/
-└── src/
-├── App.jsx # Tabbed UI
-├── api.js # Axios instance
-└── components/
-├── RegisterLand.jsx
-├── SearchLand.jsx
-├── TransferLand.jsx
-└── VerifyDoc.jsx
+    ├── .env.example
+    └── src/
+        ├── App.jsx                  # Tabs + auth gate + wallet state
+        ├── api.js                   # Axios instance (VITE_API_URL)
+        ├── wallet.js                # MetaMask / ethers helpers
+        ├── useWallet.js             # Wallet connection hook
+        ├── landTx.js                # prepare → sign → wait flow
+        ├── LandRegistry.json        # Contract ABI (written by deploy.js)
+        └── components/
+            ├── RegistryLand.jsx
+            ├── SearchLand.jsx
+            ├── TransferLand.jsx
+            ├── VerifyDoc.jsx
+            ├── WalletStatus.jsx
+            ├── Login.jsx
+            └── Signup.jsx
+```
 
 ---
 
 ## 🔗 Smart Contract Functions
 
-| Function | Description |
-|----------|-------------|
-| `registerLand(landId, ownerName, location, docHash)` | Naya land record register (duplicate check ke saath) |
-| `transferOwnership(landId, newOwner, newDocHash)` | Ownership transfer; purana record history mein push |
-| `getLand(landId)` | Current owner ka record |
-| `getHistory(landId)` | Poori ownership timeline |
-| `verifyHash(landId, hash)` | Document hash verification (tamper detection) |
+| Function | Access | Description |
+|----------|--------|-------------|
+| `registerLand(landId, ownerName, location, docHash, docUrl)` | registrar | Naya land record register (duplicate check ke saath) |
+| `transferOwnership(landId, newOwner, newDocHash, newDocUrl)` | registrar | Ownership transfer; naya record history mein push |
+| `addRegistrar(address)` / `removeRegistrar(address)` | admin | Registrar wallets manage karo |
+| `getLand(landId)` | public | Current owner ka record |
+| `getHistory(landId)` | public | Poori ownership timeline (docUrl + signer ke saath) |
+| `verifyDocument(landId, hash)` | public | Hash ko poori history se match karo → `(found, isCurrent, version)` |
+| `verifyHash(landId, hash)` | public | Sirf current deed ke against check |
 
 ---
 
 ## 🌐 API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/land/register` | Register land (multipart: details + document) |
-| POST | `/api/land/transfer` | Transfer ownership (multipart: new owner + document) |
-| GET | `/api/land/:id/history` | Ownership history |
-| POST | `/api/land/verify` | Verify document authenticity |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/auth/signup` | – | Registrar account (sirf `REGISTRAR_EMAILS` wale emails) |
+| POST | `/api/auth/login` | – | JWT token (24 h) |
+| POST | `/api/land/prepare` | JWT | PDF hash + Cloudinary upload (`landId`, `action` = register/transfer, `document`) |
+| GET | `/api/land/:id/history` | – | Ownership history |
+| POST | `/api/land/verify` | – | Verify document against full history |
 
 ---
 
@@ -116,93 +136,91 @@ andrecords/
 ### Prerequisites
 - Node.js v18+
 - npm
+- MetaMask browser extension
 
 ### 1. Install dependencies
 
 ```bash
-# Blockchain
 cd blockchain && npm install
-
-# Backend
 cd ../backend && npm install
-
-# Frontend
 cd ../frontend && npm install
-
-# Ganache (global)
 npm install -g ganache
 ```
 
 ### 2. Start Ganache (Terminal 1)
 
 ```bash
-ganache
+ganache --chain.chainId 1337
 ```
 
-Copy any one **private key** from the output.
-
-### 3. Configure & Deploy Contract (Terminal 2)
-
-`blockchain/hardhat.config.cjs` mein Ganache network + private key set karo, phir:
+### 3. Deploy the contract (Terminal 2)
 
 ```bash
 cd blockchain
-npx hardhat compile
-npx hardhat run scripts/deploy.js --network ganache
+npm test                                              # contract tests
+REGISTRAR_ADDRESS=<your MetaMask address> npm run deploy
 ```
 
-Printed **contract address** copy karo.
+Deploy karne wala account (Ganache ka pehla account) **admin** banta hai. `REGISTRAR_ADDRESS` dene par woh wallet bhi registrar ban jaata hai. Script naya ABI `backend/` aur `frontend/src/` mein copy kar deti hai — printed **contract address** copy karo.
 
-### 4. Configure Backend
+### 4. Configure
 
-`backend/.env` banao:
+`backend/.env` (see `backend/.env.example`):
 
-CONTRACT_ADDRESS=<deployed_contract_address>
-GANACHE_URL=http://127.0.0.1:8545
-PRIVATE_KEY=<ganache_private_key>
+```
 PORT=5001
-
-
-
-
-
-### 5. Start Backend (Terminal 2)
-
-```bash
-cd backend
-node server.js
-# → Backend running on http://localhost:5001
+GANACHE_URL=http://127.0.0.1:8545
+CONTRACT_ADDRESS=<deployed_contract_address>
+JWT_SECRET=<any long random string>
+REGISTRAR_EMAILS=you@example.com
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
 ```
 
-### 6. Start Frontend (Terminal 3)
+`frontend/.env` (see `frontend/.env.example`):
 
-```bash
-cd frontend
-npm run dev
-# → http://localhost:5173
+```
+VITE_API_URL=http://localhost:5001/api
+VITE_CONTRACT_ADDRESS=<deployed_contract_address>
+VITE_CHAIN_ID=1337
 ```
 
-> ⚠️ **Note:** Ganache restart karne par chain reset ho jaati hai — contract dobara deploy karke `.env` mein naya address daalna hoga.
+### 5. Set up MetaMask
+
+1. Add network → **RPC URL** `http://127.0.0.1:8545`, **Chain ID** `1337`, currency `ETH`.
+2. Import account → paste a Ganache private key (the one whose address you passed as `REGISTRAR_ADDRESS`, or the first account = admin).
+
+### 6. Start backend and frontend
+
+```bash
+cd backend && node server.js       # → http://localhost:5001
+cd frontend && npm run dev         # → http://localhost:5173
+```
+
+> ⚠️ **Note:** Ganache restart karne par chain reset ho jaati hai — contract dobara deploy karke dono `.env` mein naya address daalna hoga. MetaMask mein Settings → Advanced → *Clear activity tab data* bhi karo.
 
 ---
 
 ## 🧪 Demo Flow
 
-1. **Register** — LAND101 + owner + document → docHash & txHash on-chain
-2. **Search** — LAND101 → ownership timeline
-3. **Transfer** — LAND101 → new owner + new deed
-4. **Search again** — timeline mein 2 records (old + current owner)
-5. **Verify** — original document → ✅ VERIFIED
-6. **Verify** — modified/different file → ❌ TAMPERED
+1. **Sign up / Login** as registrar → **Connect Wallet** (header shows `registrar` badge)
+2. **Register** — LAND101 + owner + deed → MetaMask confirm → docHash & txHash
+3. **Search** — LAND101 → ownership timeline with document links
+4. **Transfer** — LAND101 → new owner + new deed → MetaMask confirm
+5. **Search again** — 2 records (old + current owner)
+6. **Verify** — new deed → ✅ CURRENT DEED
+7. **Verify** — old deed → 🕘 AUTHENTIC — OLDER DEED
+8. **Verify** — modified file → ❌ TAMPERED
+9. Switch MetaMask to a non-registrar account → Register button disabled; direct contract call reverts
 
 ---
 
 ## 🔮 Future Scope
 
-- Firebase / AWS S3 integration for cloud document storage
-- MetaMask integration — users apne wallets se transactions sign karein
 - Deployment on public testnet (Sepolia)
-- Role-based access (Registrar / Owner / Verifier)
+- Owner consent for transfers (seller signs with their own wallet)
+- Firebase / AWS S3 as alternative cloud storage
 - QR code generation for instant land record lookup
 
 ---
