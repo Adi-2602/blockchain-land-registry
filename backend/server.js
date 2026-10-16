@@ -52,6 +52,9 @@ async function recordDocument(doc) {
   }
 }
 
+// ethers ke lambe errors ko ek line mein
+const chainError = (err) => err.reason || err.shortMessage || err.message;
+
 const notRegistered = (res, landId) =>
   res.status(404).json({ success: false, error: `Land ${landId} is not registered` });
 
@@ -83,12 +86,12 @@ app.post("/api/land/register", authMiddleware, upload.single("document"), requir
     const docHash = hashFile(req.file.path);
     const { key, url: docUrl } = await uploadDocument(req.file.path, landId);
 
-    const tx = await sendWrite((o) => contract.registerLand(landId, ownerName, location, docHash, o));
+    const tx = await sendWrite("registerLand", landId, ownerName, location, docHash);
     const warning = await recordDocument({ landId, s3Key: key, docHash, ownerName, action: "register", txHash: tx.hash, by: req.user.email });
 
     res.json({ success: true, landId, docHash, docUrl, txHash: tx.hash, warning });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: chainError(err) });
   }
 });
 
@@ -106,12 +109,12 @@ app.post("/api/land/transfer", authMiddleware, upload.single("document"), requir
     const newDocHash = hashFile(req.file.path);
     const { key, url: docUrl } = await uploadDocument(req.file.path, landId);
 
-    const tx = await sendWrite((o) => contract.transferOwnership(landId, newOwner, newDocHash, o));
+    const tx = await sendWrite("transferOwnership", landId, newOwner, newDocHash);
     const warning = await recordDocument({ landId, s3Key: key, docHash: newDocHash, ownerName: newOwner, action: "transfer", txHash: tx.hash, by: req.user.email });
 
     res.json({ success: true, landId, newOwner, newDocHash, docUrl, txHash: tx.hash, warning });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: chainError(err) });
   }
 });
 
@@ -129,7 +132,7 @@ app.get("/api/land/:id/history", async (req, res) => {
     }));
     res.json({ success: true, history });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: chainError(err) });
   }
 });
 
@@ -162,7 +165,7 @@ app.post("/api/land/verify", upload.single("document"), requireDocument, async (
 
     res.json({ success: true, verified: isValid, uploadedHash });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.reason || err.message });
+    res.status(500).json({ success: false, error: chainError(err) });
   }
 });
 
