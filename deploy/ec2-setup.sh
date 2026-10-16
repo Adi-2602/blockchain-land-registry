@@ -88,7 +88,9 @@ say "5/5 Starting API on port 5001"
 pm2 delete api >/dev/null 2>&1 || true
 pm2 start server.js --name api
 pm2 save
-sudo env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$USER" --hp "$HOME" >/dev/null
+# auto-start chain + API after a server reboot
+sudo env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$(id -un)" --hp "$HOME" >/dev/null \
+  || echo "(pm2 startup skipped; run it manually if you need auto-start on reboot)"
 
 sleep 3
 curl -s localhost:5001/api/health; echo
