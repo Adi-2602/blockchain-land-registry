@@ -11,7 +11,10 @@ EMAIL="${1:?Usage: bash aws-setup.sh you@example.com}"
 REGION=ap-south-1
 export AWS_DEFAULT_REGION=$REGION
 
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+if ! ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null); then
+  echo "!! CloudShell has no AWS credentials yet. Refresh the console tab (or CloudShell > Actions > Restart), wait a minute, then re-run."
+  exit 1
+fi
 SUFFIX=${ACCOUNT: -6}
 DOCS_BUCKET="blockcodem-land-docs-$SUFFIX"
 WEB_BUCKET="blockcodem-land-web-$SUFFIX"
