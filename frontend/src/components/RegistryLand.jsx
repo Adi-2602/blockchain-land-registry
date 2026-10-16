@@ -1,7 +1,8 @@
 import { useState } from "react";
 import api from "../api";
+import { sendLandTx, walletError } from "../wallet";
 
-function RegisterLand() {
+function RegisterLand({ wallet }) {
   const [landId, setLandId] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [location, setLocation] = useState("");
@@ -9,6 +10,7 @@ function RegisterLand() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [useWallet, setUseWallet] = useState(false);
 
   const handleSubmit = async () => {
     if (!landId || !ownerName || !location || !file) {
@@ -27,8 +29,17 @@ function RegisterLand() {
       formData.append("location", location);
       formData.append("document", file);
 
-      const res = await api.post("/land/register", formData);
-      setResult(res.data);
+      if (useWallet && wallet) {
+        // MetaMask: server document upload + hash kare, transaction registrar ka wallet sign kare
+        formData.append("action", "register");
+        const prep = (await api.post("/land/prepare", formData)).data;
+        const txHash = await sendLandTx(wallet, "registerLand", [landId, ownerName, location, prep.docHash]);
+        const rec = (await api.post("/land/record", { action: "register", landId, ownerName, docHash: prep.docHash, s3Key: prep.s3Key, txHash })).data;
+        setResult({ landId, docHash: prep.docHash, docUrl: prep.docUrl, txHash, signedBy: rec.signedBy });
+      } else {
+        const res = await api.post("/land/register", formData);
+        setResult(res.data);
+      }
 
       // Form clear kar do
       setLandId("");
@@ -36,7 +47,7 @@ function RegisterLand() {
       setLocation("");
       setFile(null);
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      setError(walletError(err));
     } finally {
       setLoading(false);
     }
@@ -69,6 +80,13 @@ function RegisterLand() {
         accept="application/pdf" 
         onChange={(e) => setFile(e.target.files[0])} />
 
+        {wallet && (
+          <label className="wallet-toggle">
+            <input type="checkbox" checked={useWallet} onChange={(e) => setUseWallet(e.target.checked)} />
+            🦊 Sign with MetaMask ({wallet.address.slice(0, 6)}…)
+          </label>
+        )}
+
         <button onClick={handleSubmit} disabled={loading}>
           {loading ? "Registering on blockchain..." : "Register Land"}
         </button>
@@ -92,6 +110,7 @@ function RegisterLand() {
           <p><b>Land ID:</b> {result.landId}</p>
           <p><b>Document Hash:</b> {result.docHash}</p>
           <p><b>Transaction:</b> {result.txHash}</p>
+          {result.signedBy && <p><b>Signed by (MetaMask):</b> {result.signedBy}</p>}
           {result.docUrl && (
             <p><a href={result.docUrl} target="_blank" rel="noreferrer">📄 View stored document</a></p>
           )}

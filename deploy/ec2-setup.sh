@@ -14,6 +14,7 @@ BRANCH="${BRANCH:-claude/busy-carson-p8m9a8}"
 REPO=https://github.com/adi-2602/blockchain-land-registry.git
 APP="$HOME/blockchain-land-registry"
 CHAIN_DIR="$HOME/chaindata"
+CHAIN_ID="${CHAIN_ID:-2602}"   # MetaMask ke "Localhost 1337" network se takraav na ho
 
 say() { printf '\n\033[1;32m==> %s\033[0m\n' "$*"; }
 
@@ -55,25 +56,31 @@ EOF
 fi
 set -a; . "$ENVF"; set +a
 
-say "4/5 Starting Ganache (data kept in $CHAIN_DIR)"
+say "4/5 Starting Ganache (chain id $CHAIN_ID, data kept in $CHAIN_DIR)"
+rpc() {
+  curl -s -XPOST localhost:8545 -H 'content-type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" | node -pe 'JSON.parse(require("fs").readFileSync(0)).result'
+}
+# Purana chain process dusre chain id par chal raha ho to usi data ke saath naye id par restart karo
+if pm2 describe chain >/dev/null 2>&1 && [ "$(rpc eth_chainId '[]' 2>/dev/null)" != "$(printf '0x%x' "$CHAIN_ID")" ]; then
+  echo "switching chain id to $CHAIN_ID (existing land records are kept)"
+  pm2 delete chain >/dev/null
+fi
 if ! pm2 describe chain >/dev/null 2>&1; then
   mkdir -p "$CHAIN_DIR"
   pm2 start "$(command -v ganache)" --name chain -- \
-    --server.host 127.0.0.1 --server.port 8545 --chain.chainId 1337 \
+    --server.host 127.0.0.1 --server.port 8545 --chain.chainId "$CHAIN_ID" \
     --database.dbPath "$CHAIN_DIR" --wallet.accounts "$PRIVATE_KEY,1000000000000000000000"
 fi
 for _ in $(seq 1 30); do
-  curl -s -o /dev/null -XPOST localhost:8545 -H 'content-type: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' && break
+  [ "$(rpc eth_blockNumber '[]' 2>/dev/null)" != "" ] && [ "$(rpc eth_blockNumber '[]' 2>/dev/null)" != "undefined" ] && break
   sleep 2
 done
 
 # Deploy contract once; re-deploy only if the saved address has no code (chain was wiped)
 CODE="0x"
 if [ -n "${CONTRACT_ADDRESS:-}" ]; then
-  CODE=$(curl -s -XPOST localhost:8545 -H 'content-type: application/json' \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getCode\",\"params\":[\"$CONTRACT_ADDRESS\",\"latest\"]}" \
-    | node -pe 'JSON.parse(require("fs").readFileSync(0)).result')
+  CODE=$(rpc eth_getCode "[\"$CONTRACT_ADDRESS\",\"latest\"]")
 fi
 if [ "$CODE" = "0x" ]; then
   ADDR=$(node scripts/deploy-local.js)

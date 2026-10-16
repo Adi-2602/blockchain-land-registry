@@ -1,12 +1,31 @@
 import { useState } from "react";
 import api from "../api";
+import { verifyOnChain, walletError } from "../wallet";
 
-function VerifyDoc() {
+function VerifyDoc({ wallet }) {
   const [landId, setLandId] = useState("");
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
+  // MetaMask se seedha blockchain par verify — document server par upload nahi hota
+  const handleWalletVerify = async () => {
+    if (!landId || !file) {
+      setError("Land ID aur document dono chahiye");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setResult(null);
+    try {
+      setResult({ ...(await verifyOnChain(wallet, landId, file)), viaWallet: true });
+    } catch (err) {
+      setError(walletError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleVerify = async () => {
     if (!landId || !file) {
@@ -51,6 +70,11 @@ function VerifyDoc() {
         <button onClick={handleVerify} disabled={loading}>
           {loading ? "Verifying against blockchain..." : "Verify Document"}
         </button>
+        {wallet && (
+          <button className="wallet-verify" onClick={handleWalletVerify} disabled={loading}>
+            🦊 Verify directly on blockchain (MetaMask)
+          </button>
+        )}
       </div>
 
       {error && <p className="error">❌ {error}</p>}
@@ -69,6 +93,7 @@ function VerifyDoc() {
             </>
           )}
           <p className="hash">Uploaded file hash: {result.uploadedHash}</p>
+          {result.viaWallet && <p className="hash">Checked in your browser via MetaMask — document was not sent to the server.</p>}
         </div>
       )}
     </div>

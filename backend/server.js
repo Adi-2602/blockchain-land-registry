@@ -4,7 +4,8 @@ const multer = require("multer");
 const crypto = require("crypto");
 const fs = require("fs");
 const cors = require("cors");
-const { contract, sendWrite } = require("./contract");
+const { ethers } = require("ethers");
+const { contract, provider, sendWrite, sendEth } = require("./contract");
 const { uploadDocument, signedUrl, usingS3 } = require("./storage");
 const { saveDocument, listDocuments } = require("./db");
 const { router: authRouter, authMiddleware } = require("./auth");
@@ -60,10 +61,111 @@ const notRegistered = (res, landId) =>
 
 app.get("/api/health", async (req, res) => {
   try {
-    const block = await contract.runner.provider.getBlockNumber();
+    const block = await provider.getBlockNumber();
     res.json({ success: true, block, storage: usingS3 ? "s3" : "cloudinary" });
   } catch (err) {
     res.status(503).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- MetaMask support ----------------
+const CHAIN_NAME = "BlockCodeM Land Chain";
+
+// Frontend ko network + contract details (MetaMask mein network add karne ke liye)
+app.get("/api/chain", async (req, res) => {
+  try {
+    const { chainId } = await provider.getNetwork();
+    res.json({ success: true, chainId: Number(chainId), chainName: CHAIN_NAME, contractAddress: await contract.getAddress() });
+  } catch (err) {
+    res.status(503).json({ success: false, error: err.message });
+  }
+});
+
+// MetaMask ka RPC gateway. Ganache ka port public nahi hai; yahan sirf safe methods aage jaate hain.
+// eth_sendTransaction / eth_sign BLOCK hain — warna koi bhi server wallet se sign karwa leta.
+// eth_sendRawTransaction allowed hai: wo pehle se user ke apne wallet se signed hota hai.
+const RPC_ALLOWED = new Set([
+  "eth_chainId", "net_version", "web3_clientVersion", "eth_blockNumber", "eth_syncing",
+  "eth_call", "eth_estimateGas", "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_feeHistory",
+  "eth_getBalance", "eth_getCode", "eth_getTransactionCount", "eth_getTransactionByHash",
+  "eth_getTransactionReceipt", "eth_getBlockByNumber", "eth_getBlockByHash", "eth_getLogs",
+  "eth_sendRawTransaction",
+]);
+app.post("/api/rpc", async (req, res) => {
+  const calls = Array.isArray(req.body) ? req.body : [req.body];
+  const blocked = calls.find((c) => !c || !RPC_ALLOWED.has(c.method));
+  if (blocked) {
+    return res.json({ jsonrpc: "2.0", id: blocked?.id ?? null, error: { code: -32601, message: `Method ${blocked?.method} not allowed` } });
+  }
+  try {
+    const upstream = await fetch(process.env.GANACHE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    res.status(upstream.status).type("application/json").send(await upstream.text());
+  } catch (err) {
+    res.status(502).json({ jsonrpc: "2.0", id: calls[0]?.id ?? null, error: { code: -32603, message: err.message } });
+  }
+});
+
+// Logged-in registrar ke MetaMask wallet ko gas ke liye test ETH
+app.post("/api/wallet/fund", authMiddleware, async (req, res) => {
+  try {
+    const { address } = req.body;
+    if (!ethers.isAddress(address)) return res.status(400).json({ success: false, error: "Invalid wallet address" });
+    const balance = await provider.getBalance(address);
+    if (balance >= ethers.parseEther("1")) {
+      return res.json({ success: true, funded: false, balance: ethers.formatEther(balance) });
+    }
+    const tx = await sendEth(address, "5");
+    res.json({ success: true, funded: true, txHash: tx.hash, balance: ethers.formatEther(await provider.getBalance(address)) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: chainError(err) });
+  }
+});
+
+// MetaMask flow step 1: document check + hash + S3 upload (transaction browser se sign hoga)
+app.post("/api/land/prepare", authMiddleware, upload.single("document"), requireDocument, async (req, res) => {
+  try {
+    const { action, landId, ownerName, location } = req.body;
+    if (!landId || !ownerName || (action === "register" && !location)) {
+      return res.status(400).json({ success: false, error: "All fields are required" });
+    }
+    const exists = await contract.landExists(landId);
+    if (action === "register" && exists) {
+      return res.status(400).json({ success: false, error: `Land ${landId} is already registered. Use Transfer to change ownership.` });
+    }
+    if (action === "transfer" && !exists) {
+      return res.status(400).json({ success: false, error: `Land ${landId} is not registered yet.` });
+    }
+    const docHash = hashFile(req.file.path);
+    const { key, url } = await uploadDocument(req.file.path, landId);
+    res.json({ success: true, docHash, s3Key: key, docUrl: url });
+  } catch (err) {
+    res.status(500).json({ success: false, error: chainError(err) });
+  }
+});
+
+// MetaMask flow step 2: mined transaction ko chain par check karke DynamoDB mein index karo
+app.post("/api/land/record", authMiddleware, async (req, res) => {
+  try {
+    const { action, landId, ownerName, docHash, s3Key, txHash } = req.body;
+    const receipt = await provider.getTransactionReceipt(txHash);
+    const contractAddress = (await contract.getAddress()).toLowerCase();
+    if (!receipt || receipt.status !== 1 || receipt.to?.toLowerCase() !== contractAddress) {
+      return res.status(400).json({ success: false, error: "Transaction not found or failed on chain" });
+    }
+    const land = await contract.getLand(landId);
+    if (land.docHash !== docHash || land.ownerName !== ownerName) {
+      return res.status(400).json({ success: false, error: "On-chain record does not match this document" });
+    }
+    const warning = await recordDocument({
+      landId, s3Key, docHash, ownerName, action, txHash, by: req.user.email, signedBy: receipt.from, via: "metamask",
+    });
+    res.json({ success: true, txHash, signedBy: receipt.from, warning });
+  } catch (err) {
+    res.status(500).json({ success: false, error: chainError(err) });
   }
 });
 

@@ -304,3 +304,45 @@ button:disabled {
   font-size: 14px;
   color: #334155;
 }
+/* ---------- MetaMask ---------- */
+.wallet-bar {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.wallet-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f6851b, #e2761b);
+}
+
+.wallet-error {
+  color: #f87171;
+  font-size: 13px;
+}
+
+.wallet-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.wallet-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.wallet-verify {
+  margin-top: 10px;
+  background: linear-gradient(90deg, #f6851b, #e2761b);
+}
