@@ -10,7 +10,7 @@ set -euo pipefail
 
 S3_BUCKET="${S3_BUCKET:-blockcodem-land-docs-125254}"
 AWS_REGION="${AWS_REGION:-ap-southeast-2}"
-BRANCH="${BRANCH:-claude/busy-carson-p8m9a8}"
+BRANCH="${BRANCH:-main}"
 REPO=https://github.com/adi-2602/blockchain-land-registry.git
 APP="$HOME/blockchain-land-registry"
 CHAIN_DIR="$HOME/chaindata"
