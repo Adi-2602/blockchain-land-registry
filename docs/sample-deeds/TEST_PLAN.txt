@@ -1,0 +1,23 @@
+BlockCodeM - Sample land documents for demo (fictitious, academic use only)
+
+Har land ke liye: pehle "1_sale_deed" se REGISTER, phir "2_transfer_deed" se TRANSFER.
+
+Land ID  | Register: Owner name   + file                         | Transfer: New owner     + file
+LAND201  | V. Murugan          + LAND201_1_sale_deed_Murugan.pdf     | Sowmya Iyer        + LAND201_2_transfer_deed_Iyer.pdf
+LAND202  | Lakshmi Narayanan   + LAND202_1_sale_deed_Narayanan.pdf   | Fatima Begum       + LAND202_2_transfer_deed_Begum.pdf
+LAND203  | K. Senthil Kumar    + LAND203_1_sale_deed_Kumar.pdf       | Priya Ramesh       + LAND203_2_transfer_deed_Ramesh.pdf
+LAND204  | Anitha Devi         + LAND204_1_sale_deed_Devi.pdf        | Rajesh Kannan      + LAND204_2_transfer_deed_Kannan.pdf
+LAND205  | S. Balaji           + LAND205_1_sale_deed_Balaji.pdf      | Nandhini Venkatesh + LAND205_2_transfer_deed_Venkatesh.pdf
+
+Location (register form):
+LAND201  Survey 214/3B, Potheri, Chengalpattu
+LAND202  Survey 87/1A, Kattankulathur, Chengalpattu
+LAND203  Survey 402/7, Pallikaranai, Chennai
+LAND204  Survey 56/2C, Mambakkam, Kanchipuram
+LAND205  Survey 133/4, Thirumullaivoyal, Tiruvallur
+
+VERIFY demo (transfer ke baad):
+  LAND201 + LAND201_2_transfer_deed_Iyer.pdf            -> VERIFIED (current deed)
+  LAND201 + LAND201_1_sale_deed_Murugan.pdf             -> TAMPERED/INVALID (old deed, ownership changed)
+  LAND201 + LAND201_2_transfer_deed_Singh_TAMPERED.pdf  -> TAMPERED (buyer name + price edited)
+  LAND203 + LAND203_2_transfer_deed_Ramesh_TAMPERED.pdf -> TAMPERED (price edited)
