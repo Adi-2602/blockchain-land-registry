@@ -1,15 +1,23 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 const { ethers } = require("ethers");
 const artifact = require("./LandRegistry.json");
 
-// 1. Provider bana: new ethers.JsonRpcProvider(GANACHE_URL wala env)
 const provider = new ethers.JsonRpcProvider(process.env.GANACHE_URL);
-
-// 2. Wallet bana: new ethers.Wallet(PRIVATE_KEY, provider)
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-
-// 3. Contract instance: new ethers.Contract(CONTRACT_ADDRESS, artifact.abi, wallet)
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, artifact.abi, wallet);
 
-// 4. module.exports = contract
-module.exports = contract;
+// Write transactions ek-ek karke bhejo. ethers apna nonce ~250ms cache karta hai,
+// isliye jaldi-jaldi do writes par "nonce too low" aata tha — nonce seedha node se lo.
+let queue = Promise.resolve();
+function sendWrite(buildTx) {
+  const run = queue.then(async () => {
+    const nonce = Number(await provider.send("eth_getTransactionCount", [wallet.address, "pending"]));
+    const tx = await buildTx({ nonce });
+    await tx.wait();
+    return tx;
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
+module.exports = { contract, sendWrite };

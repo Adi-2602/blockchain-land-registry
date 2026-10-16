@@ -82,6 +82,9 @@ function TransferLand() {
           <p><b>New Owner:</b> {result.newOwner}</p>
           <p><b>New Doc Hash:</b> {result.newDocHash}</p>
           <p><b>Transaction:</b> {result.txHash}</p>
+          {result.docUrl && (
+            <p><a href={result.docUrl} target="_blank" rel="noreferrer">📄 View stored document</a></p>
+          )}
         </div>
       )}
     </div>

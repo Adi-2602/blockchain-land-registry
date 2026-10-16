@@ -92,6 +92,9 @@ function RegisterLand() {
           <p><b>Land ID:</b> {result.landId}</p>
           <p><b>Document Hash:</b> {result.docHash}</p>
           <p><b>Transaction:</b> {result.txHash}</p>
+          {result.docUrl && (
+            <p><a href={result.docUrl} target="_blank" rel="noreferrer">📄 View stored document</a></p>
+          )}
         </div>
       )}
     </div>

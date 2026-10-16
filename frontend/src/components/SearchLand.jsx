@@ -4,6 +4,7 @@ import api from "../api";
 function SearchLand() {
   const [landId, setLandId] = useState("");
   const [history, setHistory] = useState(null);
+  const [docLinks, setDocLinks] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -20,6 +21,12 @@ function SearchLand() {
     try {
       const res = await api.get(`/land/${landId}/history`);
       setHistory(res.data.history);
+
+      // Cloud (S3) mein stored documents ke download links — optional
+      const docs = await api.get(`/land/${landId}/documents`).catch(() => null);
+      const links = {};
+      (docs?.data.documents || []).forEach((d) => { if (d.url) links[d.docHash] = d.url; });
+      setDocLinks(links);
     } catch (err) {
       setError(err.response?.data?.error || "Something went wrong");
     } finally {
@@ -73,6 +80,11 @@ function SearchLand() {
               <p style={{ margin: "4px 0", wordBreak: "break-all", fontSize: "13px", color: "#666" }}>
                 🔗 Hash: {record.docHash}
               </p>
+              {docLinks[record.docHash] && (
+                <p style={{ margin: "4px 0", fontSize: "13px" }}>
+                  <a href={docLinks[record.docHash]} target="_blank" rel="noreferrer">📄 View document (AWS S3)</a>
+                </p>
+              )}
             </div>
           ))}
         </div>
