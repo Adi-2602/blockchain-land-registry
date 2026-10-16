@@ -41,6 +41,17 @@ function hashFile(path) {
   return crypto.createHash("sha256").update(fileBuffer).digest("hex");
 }
 
+// Blockchain write ho chuka hai — DynamoDB index fail ho to request fail mat karo, sirf log karo
+async function recordDocument(doc) {
+  try {
+    await saveDocument(doc);
+    return undefined;
+  } catch (err) {
+    console.error("DynamoDB saveDocument failed:", err.name, err.message, JSON.stringify(doc));
+    return `Recorded on blockchain, but document index not saved: ${err.message}`;
+  }
+}
+
 const notRegistered = (res, landId) =>
   res.status(404).json({ success: false, error: `Land ${landId} is not registered` });
 
@@ -73,9 +84,9 @@ app.post("/api/land/register", authMiddleware, upload.single("document"), requir
     const { key, url: docUrl } = await uploadDocument(req.file.path, landId);
 
     const tx = await sendWrite((o) => contract.registerLand(landId, ownerName, location, docHash, o));
-    await saveDocument({ landId, s3Key: key, docHash, ownerName, action: "register", txHash: tx.hash, by: req.user.email });
+    const warning = await recordDocument({ landId, s3Key: key, docHash, ownerName, action: "register", txHash: tx.hash, by: req.user.email });
 
-    res.json({ success: true, landId, docHash, docUrl, txHash: tx.hash });
+    res.json({ success: true, landId, docHash, docUrl, txHash: tx.hash, warning });
   } catch (err) {
     res.status(500).json({ success: false, error: err.reason || err.message });
   }
@@ -96,9 +107,9 @@ app.post("/api/land/transfer", authMiddleware, upload.single("document"), requir
     const { key, url: docUrl } = await uploadDocument(req.file.path, landId);
 
     const tx = await sendWrite((o) => contract.transferOwnership(landId, newOwner, newDocHash, o));
-    await saveDocument({ landId, s3Key: key, docHash: newDocHash, ownerName: newOwner, action: "transfer", txHash: tx.hash, by: req.user.email });
+    const warning = await recordDocument({ landId, s3Key: key, docHash: newDocHash, ownerName: newOwner, action: "transfer", txHash: tx.hash, by: req.user.email });
 
-    res.json({ success: true, landId, newOwner, newDocHash, docUrl, txHash: tx.hash });
+    res.json({ success: true, landId, newOwner, newDocHash, docUrl, txHash: tx.hash, warning });
   } catch (err) {
     res.status(500).json({ success: false, error: err.reason || err.message });
   }
