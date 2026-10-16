@@ -2,13 +2,15 @@
 # One-shot AWS setup for Blockchain Land Registry (run in AWS CloudShell).
 # Creates: cost budget, S3 docs bucket (private), S3 website bucket (public),
 # DynamoDB tables, IAM role for EC2, security group, and one EC2 server.
+# Region defaults to ap-southeast-2; override with REGION=... bash aws-setup.sh
 # Safe to re-run: anything that already exists is skipped.
 #
 # Usage:  bash aws-setup.sh you@example.com
 set -euo pipefail
 
 EMAIL="${1:?Usage: bash aws-setup.sh you@example.com}"
-REGION=ap-south-1
+# Free-plan "projects" are locked to one region; this account uses Sydney.
+REGION="${REGION:-ap-southeast-2}"
 export AWS_DEFAULT_REGION=$REGION
 
 if ! ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null); then
@@ -151,7 +153,7 @@ WEB_BUCKET=$WEB_BUCKET
 INSTANCE_ID=$IID
 PUBLIC_IP=$IP
 API_URL=http://$IP:5001/api
-WEBSITE_URL=http://$WEB_BUCKET.s3-website.$REGION.amazonaws.com
+WEBSITE_URL=http://$WEB_BUCKET.s3-website-$REGION.amazonaws.com
 EOF
 
 say "DONE. Saved to ~/blockcodem-aws.env"
