@@ -1,5 +1,6 @@
 import axios from "axios";
-const api= axios.create({ baseURL: "http://localhost:5001/api" });
+// Deploy par VITE_API_URL set karo (e.g. http://<EC2-IP>:5001/api)
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5001/api" });
 
 
 api.interceptors.request.use((config) => {

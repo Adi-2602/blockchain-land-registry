@@ -5,8 +5,8 @@ module.exports = {
   networks: {
     ganache: {
       url: "http://127.0.0.1:8545",
-      // Ganache terminal se koi bhi ek private key copy karke yahan daal:
-      accounts: ["0x5a317609f674c74ddca66dced535eb8d53158bb91f771f3ff9a5d1cd541eeb56"]
+      // Ganache ki koi private key env mein do: DEPLOYER_KEY=0x... npx hardhat run ...
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : []
     }
   }
 };

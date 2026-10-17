@@ -5,6 +5,7 @@ import TransferLand from "./components/TransferLand";
 import VerifyDoc from "./components/VerifyDoc";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
+import WalletBar from "./components/WalletBar";
 import "./index.css";
 
 const TABS = [
@@ -19,6 +20,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [userName, setUserName] = useState(localStorage.getItem("userName"));
   const [authPage, setAuthPage] = useState("login"); // login | signup
+  const [wallet, setWallet] = useState(null); // MetaMask connection
 
   const handleLogin = (newToken, name) => {
     localStorage.setItem("token", newToken);
@@ -50,6 +52,7 @@ function App() {
             👤 {userName} · <span onClick={handleLogout}>Logout</span>
           </div>
         )}
+        <WalletBar wallet={wallet} setWallet={setWallet} loggedIn={Boolean(token)} />
       </header>
 
       <nav className="tabs">
@@ -73,10 +76,10 @@ function App() {
           )
         ) : (
           <>
-            {activeTab === "register" && <RegistryLand />}
+            {activeTab === "register" && <RegistryLand wallet={wallet} />}
             {activeTab === "search" && <SearchLand />}
-            {activeTab === "transfer" && <TransferLand />}
-            {activeTab === "verify" && <VerifyDoc />}
+            {activeTab === "transfer" && <TransferLand wallet={wallet} />}
+            {activeTab === "verify" && <VerifyDoc wallet={wallet} />}
           </>
         )}
       </main>
