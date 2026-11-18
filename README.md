@@ -81,7 +81,7 @@ blockchain-land-registry/
 ├── deploy/
 │   ├── ec2-setup.sh       # one-command server setup (Ganache + API via pm2)
 │   └── aws-setup.sh       # optional CloudShell script for S3/DynamoDB/IAM/EC2
-└── docs/                  # report, PPT, screenshots, diagrams, sample deeds
+└── docs/                  # report, PPT, plagiarism report, screenshots, diagrams, sample deeds
 ```
 
 ---
